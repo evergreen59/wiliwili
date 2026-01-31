@@ -69,6 +69,9 @@ public:
         brls::Logger::debug("DataSourceRecommendVideoList: append data");
         bool skip = false;
         for (const auto& i : data) {
+            if (i.business_info.is_ad) {
+                continue;
+            }
             skip = false;
             for (const auto& j : this->recommendList) {
                 if (j.cid == i.cid) {
@@ -117,15 +120,17 @@ void HomeRecommends::onRecommendVideoList(const bilibili::RecommendVideoListResu
     bilibili::RecommendVideoListResultWrapper result;
     result.requestIndex = originalResult.requestIndex;
     result.item.resize(originalResult.item.size());
-    if (ProgramConfig::instance().upFilter.empty()) {
-        std::copy(originalResult.item.begin(), originalResult.item.end(), result.item.begin());
-    } else {
-        auto it = std::copy_if(originalResult.item.begin(), originalResult.item.end(), result.item.begin(),
-                               [](const bilibili::RecommendVideoResult& r) {
-                                   return !ProgramConfig::instance().upFilter.count(r.owner.mid);
-                               });
-        result.item.resize(std::distance(result.item.begin(), it));
-    }
+    const auto shouldInclude = [](const bilibili::RecommendVideoResult& r) {
+        if (r.business_info.is_ad) {
+            return false;
+        }
+        if (ProgramConfig::instance().upFilter.empty()) {
+            return true;
+        }
+        return !ProgramConfig::instance().upFilter.count(r.owner.mid);
+    };
+    auto it = std::copy_if(originalResult.item.begin(), originalResult.item.end(), result.item.begin(), shouldInclude);
+    result.item.resize(std::distance(result.item.begin(), it));
 
     brls::Threading::sync([this, result]() {
         auto* datasource = dynamic_cast<DataSourceRecommendVideoList*>(recyclingGrid->getDataSource());
